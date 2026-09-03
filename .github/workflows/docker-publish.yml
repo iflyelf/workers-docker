@@ -1,8 +1,7 @@
 #=================================================
-# https://github.com/danxiaonuo/dns-docker
+# https://github.com/iflyelf/workers-docker
 # Lisence: MIT
-# Author: danxiaonuo
-# Blog: https://www.danxiaonuo.com
+# Author: iflyelf
 #=================================================
 
 name: 自动编译并上传镜像
@@ -19,9 +18,9 @@ on:
   workflow_dispatch:
     inputs:
       build:
-        description: 'build dns'
+        description: 'build workers'
         required: true
-        default: 'build dns'
+        default: 'build workers'
   # 定时触发编译(每天早5点)
   schedule:
      - cron: '0 21 * * *'
@@ -79,7 +78,7 @@ jobs:
         file: ./Dockerfile
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: ${{ secrets.DOCKER_USERNAME }}/dns:${{ matrix.DOCKER_TAG }}
+        tags: ${{ secrets.DOCKER_USERNAME }}/workers:${{ matrix.DOCKER_TAG }}
       
     - name: 删除旧的GitHub-workflow
       uses: Mattraks/delete-workflow-runs@v2
