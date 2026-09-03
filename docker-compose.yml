@@ -35,6 +35,9 @@ services:
     # 加入自定义 bridge 网络
     networks:
       - workers
+    # 映射 host.docker.internal 到宿主机网关(自动解析,不依赖固定 IP)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # 对外发布 Worker 端口
     ports:
       - "8787:8787"
@@ -86,8 +89,9 @@ services:
     restart: always
     # 与 workers 容器共享同一网络命名空间(才能接收 REDIRECT 流量并取得原始目标)
     network_mode: "service:workers"
-    # redirect 监听 12345 拿到原始目标,以 HTTP CONNECT 转发给宿主机 clash(172.20.0.1:7890)
-    command: -L=redirect://:12345 -F=http://172.20.0.1:7890
+    # redirect 监听 12345 拿到原始目标,以 HTTP CONNECT 转发给宿主机 clash
+    # host.docker.internal 自动解析为宿主机网关,不依赖固定子网
+    command: -L=redirect://:12345 -F=http://host.docker.internal:7890
 
 networks:
   # 自定义 bridge 网络(仅 IPv4)
