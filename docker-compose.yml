@@ -63,9 +63,9 @@ services:
         nft add rule ip gost output ip daddr != '{ 0.0.0.0/8, 10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 }' meta l4proto tcp redirect to :12345
         # 运行 Worker(后台运行,以便 trap 生效)
         wrangler dev --ip 0.0.0.0 --port 8787 --env production &
-        WRANGLER_PID=$!
+        WRANGLER_PID=$$!
         # 等待 wrangler 进程结束或收到信号
-        wait $WRANGLER_PID
+        wait $$WRANGLER_PID
     # 指定容器的 ulimits 限制值
     ulimits:
       nproc: 65535
