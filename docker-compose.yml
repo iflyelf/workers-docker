@@ -1,0 +1,108 @@
+services:
+
+  # Cloudflare Workers 开发环境(通过挂载外部 workers.js 运行)
+  workers:
+    # 模拟一个伪终端
+    tty: true
+    # 打开标准输入,可以接受外部输入
+    stdin_open: true
+    # 指定容器名称
+    container_name: workers
+    # 指定为镜像名称或镜像ID(使用 workers 专用镜像)
+    image: iflyelf/workers:latest
+    # 允许容器中运行一些特权命令(设置 nftables 需要)
+    privileged: true
+    # 指定容器退出后的重启策略为始终重启
+    restart: always
+    # 指定容器的内核能力(capacity)分配
+    cap_add:
+     - ALL
+    # 关闭 IPv6,仅使用 IPv4 透明代理
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: "1"
+      net.ipv6.conf.default.disable_ipv6: "1"
+    # 数据卷所挂载路径设置
+    volumes:
+      # 同步宿主机时区与时间
+      - /usr/share/zoneinfo:/usr/share/zoneinfo:ro,cached
+      - /etc/localtime:/etc/localtime:ro,cached
+      # 共享内核
+      - /lib/modules:/lib/modules:ro,cached
+      - /etc/sysctl.conf:/etc/sysctl.conf:ro,cached
+      # 挂载 workers.js 和 wrangler.toml 到容器(请根据实际路径修改)
+      - ./workers.js:/app/workers.js:ro
+      - ./wrangler.toml:/app/wrangler.toml:ro
+    # 加入自定义 bridge 网络
+    networks:
+      - workers
+    # 对外发布 Worker 端口
+    ports:
+      - "8787:8787"
+    # 启动时先配置 nftables REDIRECT 规则,再运行 wrangler
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        # 定义清理函数
+        cleanup() {
+          echo "收到停止信号,清理 nftables 规则..."
+          nft delete table ip gost 2>/dev/null || true
+          exit 0
+        }
+        # 捕获 SIGTERM/SIGINT 信号(docker stop / Ctrl+C)
+        trap cleanup TERM INT
+        
+        # 清理可能存在的旧表(幂等)
+        nft delete table ip gost 2>/dev/null || true
+        # 创建表与 output 链
+        nft add table ip gost
+        nft add chain ip gost output '{ type nat hook output priority -100 ; policy accept ; }'
+        # 排除私有/保留网段后,将 TCP 流量重定向到 gost 透明代理端口 12345
+        # (172.20.0.0/12 已包含 172.20.0.0/24 网关与 clash)
+        nft add rule ip gost output ip daddr != '{ 0.0.0.0/8, 10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 }' meta l4proto tcp redirect to :12345
+        # 运行 Worker(后台运行,以便 trap 生效)
+        wrangler dev --ip 0.0.0.0 --port 8787 --env production &
+        WRANGLER_PID=$!
+        # 等待 wrangler 进程结束或收到信号
+        wait $WRANGLER_PID
+    # 指定容器的 ulimits 限制值
+    ulimits:
+      nproc: 65535
+      nofile:
+          soft: 65535
+          hard: 65535
+
+  # gost 透明代理网关(与 workers 共享网络命名空间)
+  gost:
+    # 指定容器名称
+    container_name: workers-gost
+    # gost 镜像
+    image: gogost/gost:latest
+    # 依赖 workers 容器先启动(共享其网络命名空间)
+    depends_on:
+      - workers
+    # 指定容器退出后的重启策略为始终重启
+    restart: always
+    # 与 workers 容器共享同一网络命名空间(才能接收 REDIRECT 流量并取得原始目标)
+    network_mode: "service:workers"
+    # redirect 监听 12345 拿到原始目标,以 HTTP CONNECT 转发给宿主机 clash(172.20.0.1:7890)
+    command: -L=redirect://:12345 -F=http://172.20.0.1:7890
+
+networks:
+  # 自定义 bridge 网络(仅 IPv4)
+  workers:
+    driver: bridge
+    enable_ipv6: false
+    driver_opts:
+      com.docker.network.bridge.name: workers
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_forwarding: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+      com.docker.network.bridge.host_binding_ipv4: "0.0.0.0"
+      com.docker.network.driver.mtu: 1500
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/24
+          gateway: 172.20.0.1
