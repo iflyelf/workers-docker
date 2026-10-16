@@ -1,49 +1,6 @@
 #############################
-#     分阶段构建配置         #
+#     精简单阶段构建         #
 #############################
-
-#===========================================
-# 构建阶段：使用完整工具链镜像
-#===========================================
-FROM iflyelf/ubuntu:latest AS builder
-
-# 作者描述信息
-LABEL org.opencontainers.image.authors="iflyelf" \
-      org.opencontainers.image.vendor="iflyelf"
-
-# 时区设置
-ARG TZ=Asia/Shanghai
-ENV TZ=$TZ
-
-# 语言设置
-ARG LANG=zh_CN.UTF-8
-ENV LANG=$LANG
-
-# 环境设置
-ARG DEBIAN_FRONTEND=noninteractive
-ENV DEBIAN_FRONTEND=$DEBIAN_FRONTEND
-
-WORKDIR /build
-
-# iflyelf/ubuntu:latest 已预装 Node.js, Go, Python 等工具链
-# 检查并安装 wrangler
-RUN set -eux && \
-    # 显示当前环境信息
-    echo "Node.js version:" && node --version && \
-    echo "npm version:" && npm --version && \
-    echo "Node.js path:" && which node && \
-    echo "npm path:" && which npm && \
-    # 配置 npm 镜像源并安装 wrangler
-    npm config set registry https://registry.npmmirror.com && \
-    npm install -g wrangler && \
-    # 验证安装
-    wrangler --version && \
-    # 清理
-    rm -rf /tmp/* /root/.npm
-
-#===========================================
-# 运行阶段：使用精简镜像
-#===========================================
 FROM iflyelf/ubuntu:lite
 
 # 作者描述信息
@@ -80,8 +37,9 @@ ENV WRANGLER_PORT=$WRANGLER_PORT
 
 # Node.js 环境变量
 ENV NODE_ENV=production
+ENV PATH=/usr/local/bin:/usr/local/node/bin:$PATH
 
-# 运行时必需依赖包
+# 运行时依赖包（包含 Node.js 安装所需）
 ARG RUNTIME_DEPS="\
     curl \
     wget \
@@ -94,10 +52,11 @@ ARG RUNTIME_DEPS="\
     iptables \
     nftables \
     jq \
-    tini"
+    tini \
+    gnupg2"
 ENV RUNTIME_DEPS=$RUNTIME_DEPS
 
-# ***** 安装运行时依赖 *****
+# ***** 安装运行时依赖和 Node.js *****
 RUN set -eux && \
     # 更新源地址
     sed -i s@http://*.*ubuntu.com@https://mirrors.aliyun.com@g /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || \
@@ -105,42 +64,28 @@ RUN set -eux && \
     # 解决证书认证失败问题
     mkdir -p /etc/apt/apt.conf.d && \
     echo 'Acquire { https::Verify-Peer false }' > /etc/apt/apt.conf.d/99verify-peer.conf && \
-    # 更新并安装运行时依赖
+    # 更新系统
     DEBIAN_FRONTEND=noninteractive apt update -qqy && \
+    # 安装运行时依赖
     DEBIAN_FRONTEND=noninteractive apt install -qqy --no-install-recommends $RUNTIME_DEPS && \
+    # 安装 Node.js 22.x LTS
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    DEBIAN_FRONTEND=noninteractive apt update -qqy && \
+    DEBIAN_FRONTEND=noninteractive apt install -qqy nodejs && \
+    # 配置 npm 镜像源
+    npm config set registry https://registry.npmmirror.com && \
+    # 安装 wrangler
+    npm install -g wrangler && \
     # 清理
     DEBIAN_FRONTEND=noninteractive apt -qqy autoremove --purge && \
     DEBIAN_FRONTEND=noninteractive apt -qqy autoclean && \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /root/.npm && \
     # 配置时区
     ln -sf /usr/share/zoneinfo/${TZ} /etc/localtime && \
     echo ${TZ} > /etc/timezone && \
     # 配置语言环境
     locale-gen zh_CN.UTF-8 && \
     localedef -f UTF-8 -i zh_CN zh_CN.UTF-8
-
-# ***** 从构建阶段复制所有必需文件 *****
-# 复制整个 Node.js 安装目录
-COPY --from=builder /usr/bin/node /usr/bin/node
-COPY --from=builder /usr/bin/npm /usr/bin/npm
-COPY --from=builder /usr/bin/npx /usr/bin/npx
-COPY --from=builder /usr/bin/corepack /usr/bin/corepack
-
-# 复制 Node.js 库文件
-COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules
-
-# 复制 wrangler（从 npm global 安装位置）
-COPY --from=builder /usr/local/bin/wrangler /usr/local/bin/wrangler
-COPY --from=builder /usr/local/lib/node_modules/wrangler /usr/local/lib/node_modules/wrangler
-
-# 创建必要的符号链接
-RUN set -eux && \
-    ln -sf /usr/bin/node /usr/local/bin/node && \
-    ln -sf /usr/bin/npm /usr/local/bin/npm && \
-    ln -sf /usr/bin/npx /usr/local/bin/npx && \
-    ln -sf /usr/local/bin/wrangler /usr/bin/wrangler && \
-    # 确保 wrangler 可执行
-    chmod +x /usr/local/bin/wrangler
 
 # 验证安装
 RUN node --version && npm --version && wrangler --version
