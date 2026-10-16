@@ -25,16 +25,12 @@ ENV DEBIAN_FRONTEND=$DEBIAN_FRONTEND
 
 WORKDIR /build
 
-# ***** 安装 Node.js 最新 LTS 和 wrangler *****
+# iflyelf/ubuntu:latest 已预装 Node.js, Go, Python 等工具链
+# 仅需安装 wrangler
 RUN set -eux && \
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    DEBIAN_FRONTEND=noninteractive apt update -qqy && \
-    DEBIAN_FRONTEND=noninteractive apt install -qqy nodejs && \
     npm config set registry https://registry.npmmirror.com && \
-    npm install -g n && \
-    n lts && \
     npm install -g wrangler && \
-    rm -rf /var/lib/apt/lists/* /tmp/*
+    rm -rf /tmp/* /root/.npm
 
 # 验证安装
 RUN node --version && npm --version && wrangler --version
@@ -99,10 +95,11 @@ ENV RUNTIME_DEPS=$RUNTIME_DEPS
 # ***** 安装运行时依赖 *****
 RUN set -eux && \
     # 更新源地址
+    sed -i s@http://*.*ubuntu.com@https://mirrors.aliyun.com@g /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || \
     sed -i s@http://*.*ubuntu.com@https://mirrors.aliyun.com@g /etc/apt/sources.list && \
     # 解决证书认证失败问题
-    touch /etc/apt/apt.conf.d/99verify-peer.conf && \
-    echo 'Acquire { https::Verify-Peer false }' >> /etc/apt/apt.conf.d/99verify-peer.conf && \
+    mkdir -p /etc/apt/apt.conf.d && \
+    echo 'Acquire { https::Verify-Peer false }' > /etc/apt/apt.conf.d/99verify-peer.conf && \
     # 更新并安装运行时依赖
     DEBIAN_FRONTEND=noninteractive apt update -qqy && \
     DEBIAN_FRONTEND=noninteractive apt install -qqy --no-install-recommends $RUNTIME_DEPS && \
@@ -118,11 +115,17 @@ RUN set -eux && \
     localedef -f UTF-8 -i zh_CN zh_CN.UTF-8
 
 # ***** 从构建阶段复制 Node.js 和 wrangler *****
-COPY --from=builder /usr/local/bin/node /usr/local/bin/node
-COPY --from=builder /usr/local/bin/npm /usr/local/bin/npm
-COPY --from=builder /usr/local/bin/npx /usr/local/bin/npx
-COPY --from=builder /usr/local/bin/wrangler /usr/local/bin/wrangler
-COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+# 复制 Node.js 二进制文件
+COPY --from=builder /usr/bin/node /usr/local/bin/node
+COPY --from=builder /usr/bin/npm /usr/local/bin/npm
+COPY --from=builder /usr/bin/npx /usr/local/bin/npx
+
+# 复制 wrangler
+COPY --from=builder /usr/local/lib/node_modules/wrangler /usr/local/lib/node_modules/wrangler
+
+# 创建 wrangler 可执行文件链接
+RUN ln -sf /usr/local/lib/node_modules/wrangler/bin/wrangler.js /usr/local/bin/wrangler && \
+    chmod +x /usr/local/bin/wrangler
 
 # 创建符号链接
 RUN set -eux && \
