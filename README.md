@@ -1,13 +1,30 @@
 # workers-docker
 
-通用的 Cloudflare Workers 开发环境，支持通过 docker-compose 挂载外部 `workers.js` 运行。
+基于 Cloudflare Workers 的多功能加速代理，支持 GitHub、Docker、SourceForge、Google Sheets 等资源加速。
 
 ## 特性
 
 - ✅ 基于 Ubuntu 24.04 + Node.js LTS + wrangler
-- ✅ 内置 nftables + gost 透明代理支持（解决国内网络访问 Cloudflare API 问题）
-- ✅ 通过挂载卷运行任意 workers.js，无需重新构建镜像
-- ✅ 支持自定义 wrangler.toml 配置
+- ✅ 内置多功能加速代理 Worker (proxy-cf)
+- ✅ 支持 GitHub Raw/Release 文件加速
+- ✅ 支持 Docker Hub 镜像加速
+- ✅ 支持 Git Clone 加速
+- ✅ 支持 Google Sheets 访问
+- ✅ 支持 DNS-over-HTTPS (DoH) 服务
+- ✅ 内置 nftables + gost 透明代理支持（解决国内网络访问问题）
+- ✅ 通过挂载卷运行自定义 workers.js
+
+## 镜像仓库
+
+### Docker Hub
+```bash
+docker pull iflyelf/workers:latest
+```
+
+### 华为云 SWR（国内加速）
+```bash
+docker pull swr.cn-east-3.myhuaweicloud.com/iflyelf/workers:latest
+```
 
 ## 快速开始
 
@@ -104,6 +121,30 @@ docker exec -it workers ls -l /app/
 ```bash
 docker build -t myname/workers:latest .
 ```
+
+## 内置 Worker 功能
+
+本镜像内置 [proxy-cf](https://github.com/iflyelf/proxy-cf) Worker，提供以下功能：
+
+- **GitHub 加速**: Release 下载、Raw 文件访问加速
+- **Docker Hub 镜像加速**: 支持配置为 Docker registry mirror
+- **其他容器仓库**: gcr.io, ghcr.io, quay.io, registry.k8s.io 等
+- **Git Clone 加速**: 通过代理加速 Git 仓库克隆
+- **Google Sheets 访问**: 无需 API Key 访问公开表格
+- **DNS-over-HTTPS**: 提供 DoH 解析服务
+- **SourceForge 加速**: 文件下载加速
+
+访问 `http://localhost:8787` 可查看完整使用文档。
+
+## 构建信息
+
+- **GitHub Actions**: 自动构建并推送到 Docker Hub 和华为云 SWR
+- **支持架构**: linux/amd64, linux/arm64
+- **触发方式**: 
+  - Push 修改 Dockerfile/workers.js/docker-compose.yml
+  - 手动触发 workflow_dispatch
+  - 定时构建（每天 UTC 21:00 / 北京时间 05:00）
+  - Star 仓库触发
 
 ## 许可证
 

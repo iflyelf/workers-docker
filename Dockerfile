@@ -5,8 +5,8 @@ ARG BASE_IMAGE_TAG=resolute
 FROM ubuntu:${BASE_IMAGE_TAG}
 
 # 作者描述信息
-LABEL org.opencontainers.image.authors="danxiaonuo" \
-      org.opencontainers.image.vendor="danxiaonuo"
+LABEL org.opencontainers.image.authors="iflyelf" \
+      org.opencontainers.image.vendor="iflyelf"
       
 # 时区设置
 ARG TZ=Asia/Shanghai
@@ -16,7 +16,7 @@ ARG LANG=zh_CN.UTF-8
 ENV LANG=$LANG
 
 # 镜像变量
-ARG DOCKER_IMAGE=danxiaonuo/ubuntu
+ARG DOCKER_IMAGE=iflyelf/ubuntu
 ENV DOCKER_IMAGE=$DOCKER_IMAGE
 ARG DOCKER_IMAGE_OS=ubuntu
 ENV DOCKER_IMAGE_OS=$DOCKER_IMAGE_OS
