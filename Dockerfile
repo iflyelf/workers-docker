@@ -26,14 +26,20 @@ ENV DEBIAN_FRONTEND=$DEBIAN_FRONTEND
 WORKDIR /build
 
 # iflyelf/ubuntu:latest 已预装 Node.js, Go, Python 等工具链
-# 仅需安装 wrangler
+# 检查并安装 wrangler
 RUN set -eux && \
+    # 显示当前环境信息
+    echo "Node.js version:" && node --version && \
+    echo "npm version:" && npm --version && \
+    echo "Node.js path:" && which node && \
+    echo "npm path:" && which npm && \
+    # 配置 npm 镜像源并安装 wrangler
     npm config set registry https://registry.npmmirror.com && \
     npm install -g wrangler && \
+    # 验证安装
+    wrangler --version && \
+    # 清理
     rm -rf /tmp/* /root/.npm
-
-# 验证安装
-RUN node --version && npm --version && wrangler --version
 
 #===========================================
 # 运行阶段：使用精简镜像
@@ -74,7 +80,6 @@ ENV WRANGLER_PORT=$WRANGLER_PORT
 
 # Node.js 环境变量
 ENV NODE_ENV=production
-ENV PATH=/usr/local/bin:/usr/local/node/bin:$PATH
 
 # 运行时必需依赖包
 ARG RUNTIME_DEPS="\
@@ -114,25 +119,28 @@ RUN set -eux && \
     locale-gen zh_CN.UTF-8 && \
     localedef -f UTF-8 -i zh_CN zh_CN.UTF-8
 
-# ***** 从构建阶段复制 Node.js 和 wrangler *****
-# 复制 Node.js 二进制文件
-COPY --from=builder /usr/bin/node /usr/local/bin/node
-COPY --from=builder /usr/bin/npm /usr/local/bin/npm
-COPY --from=builder /usr/bin/npx /usr/local/bin/npx
+# ***** 从构建阶段复制所有必需文件 *****
+# 复制整个 Node.js 安装目录
+COPY --from=builder /usr/bin/node /usr/bin/node
+COPY --from=builder /usr/bin/npm /usr/bin/npm
+COPY --from=builder /usr/bin/npx /usr/bin/npx
+COPY --from=builder /usr/bin/corepack /usr/bin/corepack
 
-# 复制 wrangler
+# 复制 Node.js 库文件
+COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules
+
+# 复制 wrangler（从 npm global 安装位置）
+COPY --from=builder /usr/local/bin/wrangler /usr/local/bin/wrangler
 COPY --from=builder /usr/local/lib/node_modules/wrangler /usr/local/lib/node_modules/wrangler
 
-# 创建 wrangler 可执行文件链接
-RUN ln -sf /usr/local/lib/node_modules/wrangler/bin/wrangler.js /usr/local/bin/wrangler && \
-    chmod +x /usr/local/bin/wrangler
-
-# 创建符号链接
+# 创建必要的符号链接
 RUN set -eux && \
-    ln -sf /usr/local/bin/node /usr/bin/node && \
-    ln -sf /usr/local/bin/npm /usr/bin/npm && \
-    ln -sf /usr/local/bin/npx /usr/bin/npx && \
-    ln -sf /usr/local/bin/wrangler /usr/bin/wrangler
+    ln -sf /usr/bin/node /usr/local/bin/node && \
+    ln -sf /usr/bin/npm /usr/local/bin/npm && \
+    ln -sf /usr/bin/npx /usr/local/bin/npx && \
+    ln -sf /usr/local/bin/wrangler /usr/bin/wrangler && \
+    # 确保 wrangler 可执行
+    chmod +x /usr/local/bin/wrangler
 
 # 验证安装
 RUN node --version && npm --version && wrangler --version
