@@ -1,24 +1,30 @@
-# Cloudflare Workers 配置 - 用于在容器内用 wrangler dev 运行 workers.js
-name = "doh-worker"
+# Cloudflare Workers 配置 - 多功能加速代理
+name = "proxy-worker"
 main = "workers.js"
 compatibility_date = "2026-01-01"
 
-# 默认/开发环境变量（与 workers.js 中 env 对应）
+# 默认环境变量（与 workers.js 中 env 对应）
 [vars]
-# PATH = "dns-query"
+# DOH 服务器配置
 # DOH = "https://cloudflare-dns.com"
+# PATH = "dns-query"  # DoH 路径，也可用作 TOKEN
 
-# 生产环境：docker-compose 默认使用此配置
+# 代理配置
+# URL = "nginx"  # 返回 nginx 欢迎页
+# URL = "https://example.com"  # 反向代理到指定 URL
+# URL302 = "https://example.com"  # 302 重定向
+
+# 访问令牌（用于 IP 地理位置查询等需要认证的功能）
+# TOKEN = "your-secret-token"
+
+# 生产环境配置示例
 [env.production]
 # [env.production.vars]
 # DOH = "https://cloudflare-dns.com"
 # PATH = "dns-query"
-# TOKEN = "your-production-token"
-# URL302 = "https://example.com"
-# URL = "https://example.com"
+# TOKEN = "production-token"
 
-# 开发环境变量（可选，.dev.vars 或此处）
+# 开发环境配置示例
 # [env.dev.vars]
-# TOKEN = "your-token"
-# URL302 = "https://example.com"
-# URL = "https://example.com"
+# TOKEN = "dev-token"
+# URL = "nginx"
